@@ -8,19 +8,21 @@ CREATE TABLE Thuoc (
 	SoLuong DECIMAL (10,2),
 	DonVi NVARCHAR (7),
 	Gia int,
-	HSD DATE
+	TrangThai bit
 );
 CREATE TABLE NhanVien (
 	Ma_NV int IDENTITY(1,1) PRIMARY KEY,
-	HoTen NVARCHAR(40),
+	HoTen NVARCHAR(MAX),
 	NgaySinh DATE,
-	Chuc NVARCHAR(7),
+	SDT VARCHAR(MAX),
+	Chuc NVARCHAR(MAX),
 	Luong int,
-	TangCa int
+	TangCa int,
+	TrangThai bit
 );
 CREATE TABLE BenhNhan (
 	Ma_BN int IDENTITY(1,1) PRIMARY KEY,
-	Ten NVARCHAR(40),
+	Ten NVARCHAR(MAX),
 	Tuoi INT,
 	GioiTinh int,
 	SDT CHAR(12)
@@ -28,7 +30,8 @@ CREATE TABLE BenhNhan (
 CREATE TABLE DichVu (
 	Ma_DichVu int IDENTITY(1,1) PRIMARY KEY,
 	TenDV NVARCHAR(40),
-	Gia int
+	Gia int,
+	TrangThai bit
 );
 CREATE TABLE HoaDon (
 	Ma_HoaDon INT IDENTITY(1,1) PRIMARY KEY,
@@ -36,6 +39,7 @@ CREATE TABLE HoaDon (
 	NgayKham DATE,
 	BacSi INT,
 	TongTien INT,
+	TrangThai bit,
 	FOREIGN KEY (Ma_BN) REFERENCES BenhNhan (Ma_BN),
 	FOREIGN KEY (BacSi) REFERENCES NhanVien(Ma_NV)
 );
@@ -66,9 +70,10 @@ CREATE TABLE ACCounts (
 	FOREIGN KEY (Ma_NV) REFERENCES NhanVien(Ma_NV)
 );
 CREATE TABLE LichSuKham (
-	Ma_BN INT PRIMARY KEY,
+	Ma_BN INT,
 	NgayKham DATE,
 	ChuanDoan NVARCHAR(MAX),
+	PRIMARY KEY (Ma_BN,NgayKham),
 	FOREIGN KEY (Ma_BN) REFERENCES BenhNhan(Ma_BN)
 );
 CREATE TABLE DoanhThu (
@@ -86,38 +91,49 @@ RETURNS TABLE
 			WHERE ACCounts.TenTaiKhoan=@TenTaiKhoan AND ACCounts.PassWord=@PassWord
 GO
 CREATE PROC ThemNhanVien
-	@HoTen NVARCHAR(40),
+	@HoTen NVARCHAR(MAX),
 	@NgaySinh DATE,
-	@Chuc NVARCHAR(7),
-	@Luong INT,
-	@TangCa INT
+	@SDT VARCHAR(MAX),
+	@Chuc NVARCHAR(MAX),
+	@Luong INT
 AS
 BEGIN
-INSERT INTO NhanVien VALUES (@HoTen,@NgaySinh,@Chuc,@Luong,@TangCa);
+INSERT INTO NhanVien VALUES (@HoTen,@NgaySinh,@SDT,@Chuc,@Luong,NULL,1);
 END
 GO
 CREATE PROC SuaNhanVien
 	@Ma_NV INT,
-	@HoTen NVARCHAR(40),
+	@HoTen NVARCHAR(MAX),
 	@NgaySinh DATE,
+	@SDT VARCHAR(MAX),
 	@Chuc NVARCHAR(7),
 	@Luong INT,
 	@TangCa INT
 AS
 BEGIN
-UPDATE NhanVien SET HoTen=@HoTen, 
-					NgaySinh=@NgaySinh, 
-					Chuc=@Chuc, 
+UPDATE NhanVien SET HoTen=@HoTen,
+					NgaySinh=@NgaySinh,
+					SDT=@SDT,
+					Chuc=@Chuc,
 					Luong=@Luong, 
 					TangCa=@TangCa 
 				WHERE Ma_NV=@Ma_NV
 END
+GO
+CREATE PROC XoaNhanVien
+			@Ma_NV INT
+AS
+BEGIN TRAN
+	UPDATE NhanVien SET TrangThai=0
+					WHERE Ma_NV=@Ma_NV
+COMMIT
 GO
 CREATE FUNCTION DanhSachNV()
  RETURNS TABLE
  AS
  RETURN	SELECT *
 		FROM NhanVien
+		WHERE NhanVien.TrangThai=1
 
 GO
 CREATE FUNCTION TimNVTheoTen(@HoTen NVARCHAR(40))
@@ -125,25 +141,25 @@ CREATE FUNCTION TimNVTheoTen(@HoTen NVARCHAR(40))
  AS
  RETURN	SELECT *
 		FROM NhanVien
-		WHERE NhanVien.HoTen like '%'+@HoTen+'%'
+		WHERE NhanVien.HoTen like '%'+@HoTen+'%' AND NhanVien.TrangThai=1
 GO
 CREATE FUNCTION TimNVTheoChuc(@Chuc NVARCHAR(7))
  RETURNS TABLE
  AS
  RETURN	SELECT *
 		FROM NhanVien
-		WHERE NhanVien.Chuc='%'+@Chuc+'%'
+		WHERE NhanVien.Chuc='%'+@Chuc+'%' AND NhanVien.TrangThai=1
 GO
 CREATE FUNCTION TimNVTheoMa(@MaNhanVien INT)
  RETURNS TABLE
  AS
  RETURN	SELECT *
 		FROM NhanVien
-		WHERE NhanVien.Chuc=@MaNhanVien
+		WHERE NhanVien.Chuc=@MaNhanVien AND NhanVien.TrangThai=1
 GO
 
 CREATE PROC ThemBenhNhan
-	@HoTen NVARCHAR(40),
+	@HoTen NVARCHAR(MAX),
 	@Tuoi INT,
 	@GioiTinh INT,
 	@SDT INT
@@ -154,7 +170,7 @@ END
 GO
 CREATE PROC SuaBenhNan
 	@Ma_BN INT,
-	@HoTen NVARCHAR(40),
+	@HoTen NVARCHAR(MAX),
 	@Tuoi INT,
 	@GioiTinh INT,
 	@SDT INT
@@ -194,7 +210,7 @@ CREATE PROC ThemDichVu
 	@Gia int
 AS
 BEGIN
-INSERT INTO DichVu VALUES (@TenDV,@Gia	);
+INSERT INTO DichVu VALUES (@TenDV,@Gia,1);
 END
 GO
 CREATE PROC SuaDichVu
@@ -208,18 +224,27 @@ UPDATE DichVu SET	TenDV=@TenDV,
 				WHERE Ma_DichVu=@Ma_DV
 END
 GO
+CREATE PROC XoaDichVu
+			@Ma_DV INT
+AS
+BEGIN TRAN
+	UPDATE DichVu SET TrangThai=0 WHERE Ma_DichVu=@Ma_DV
+COMMIT
+GO
 CREATE FUNCTION DanhSachDV()
  RETURNS TABLE
  AS
  RETURN	SELECT *
 		FROM DichVu
+		WHERE DichVu.TrangThai=1
 
 GO
-CREATE PROC ChiDinhDV 
-			@Ma_HoaDon INT,
+CREATE PROC ChiDinhDV
+			@Ma_BN INT,
 			@TenDV NVARCHAR(40)
 AS
 BEGIN
+	EXEC ThemHoaDon @Ma_BN;
 	DECLARE @Ma_DV INT;
 	SELECT @Ma_DV=DichVu.Ma_DichVu
 	FROM DichVu
@@ -227,6 +252,13 @@ BEGIN
 	INSERT INTO ChiTietDV VALUES (@Ma_HoaDon,@Ma_DV)
 END
 GO
+CREATE FUNCTION TenDV()
+RETURNS TABLE
+AS
+RETURN SELECT DichVu.TenDV
+		FROM DichVu
+GO
+
 
 CREATE PROC ThemHoaDon
 	@Ma_BN INT
@@ -312,9 +344,9 @@ BEGIN
 	END
 END
 GO
-CREATE FUNCTION HienDoanhThuNgay (@Ngay DATE)
+CREATE FUNCTION HienDoanhThuNgay ()
 RETURNS TABLE
-AS
+AS 
 RETURN	SELECT NgayThu,TongThu
 		FROM DoanhThu
 		WHERE MONTH(DoanhThu.NgayThu)=MONTH(@Ngay) AND YEAR(DoanhThu.NgayThu)=YEAR(@Ngay)
@@ -361,3 +393,5 @@ SELECT *
 FROM DanhSachBN()
 SELECT *
 FROM DanhSachDV()
+SELECT *
+FROM TenDV()
