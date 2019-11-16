@@ -65,7 +65,7 @@ CREATE TABLE ToaThuoc (
 );
 CREATE TABLE ACCounts (
 	Ma_NV int PRIMARY KEY,
-	TenTaiKhoan VARCHAR(20) NOT NULL,
+	TenTaiKhoan VARCHAR(20) NOT NULL UNIQUE,
 	PassWord VARCHAR(20) NOT NULL,
 	Quyen NVARCHAR(20) NOT NULL,
 	FOREIGN KEY (Ma_NV) REFERENCES NhanVien(Ma_NV)
@@ -92,6 +92,15 @@ RETURNS TABLE
 			FROM ACCounts
 			WHERE ACCounts.TenTaiKhoan=@TenTaiKhoan AND ACCounts.PassWord=@PassWord
 GO
+CREATE PROC DoiMatKhau
+				@Ma_NV INT,
+				@PassWord VARCHAR(20)
+AS
+BEGIN
+	UPDATE ACCounts SET PassWord=@PassWord WHERE Ma_NV=@Ma_NV
+END
+GO
+
 CREATE PROC ThemNhanVien
 	@HoTen NVARCHAR(MAX),
 	@NgaySinh DATE,
@@ -377,7 +386,12 @@ RETURN	SELECT YEAR(DoanhThu.NgayThu) AS NamThu,SUM(TongThu) AS TONGTHU
 		GROUP BY YEAR(DoanhThu.NgayThu)
 GO
 
-
+CREATE PROC ThanhToanHoaDon @Ma_HoaDon INT
+AS
+BEGIN
+	UPDATE HoaDon SET TrangThai=1 WHERE Ma_HoaDon=@Ma_HoaDon
+END
+GO
 
 CREATE TRIGGER TinhGiaThuoc ON ToaThuoc
 AFTER insert
@@ -423,8 +437,60 @@ BEGIN TRAN
 					WHERE HoaDon.Ma_HoaDon=@Ma_HoaDon
 COMMIT TRAN
 GO
+CREATE TRIGGER TinhDoanhThuNgay ON HoaDon
+AFTER INSERT,UPDATE
+AS
+BEGIN TRAN
+	DECLARE @TONGTHU INT, @NGAY DATE;
+	SELECT @TONGTHU=inserted.TongTien,@NGAY=inserted.NgayKham
+	FROM inserted
+	IF ((SELECT DoanhThu.NgayThu
+		FROM DoanhThu
+		WHERE DoanhThu.NgayThu=@NGAY) IS NULL) 
+		INSERT INTO DoanhThu VALUES (@NGAY,@TONGTHU);
+	ELSE IF EXISTS ((SELECT HoaDon.Ma_HoaDon
+			FROM HoaDon,inserted
+			WHERE HoaDon.TrangThai=1 AND HoaDon.Ma_HoaDon=inserted.Ma_HoaDon))
+	BEGIN
+		DECLARE @TongThuCu INT;
+		SELECT @TongThuCu=DoanhThu.TongThu
+		FROM DoanhThu
+		WHERE DoanhThu.NgayThu=@NGAY
+		UPDATE DoanhThu SET TongThu=@TongThuCu+@TONGTHU
+						WHERE NgayThu=@NGAY
+	END
+COMMIT
+GO
 
-
+CREATE TRIGGER ThemTaiKhoan ON NhanVien
+AFTER INSERT
+AS
+BEGIN TRAN
+	DECLARE @Ma_NV INT, @TenTaiKhoan VARCHAR(MAX), @QUYEN NVARCHAR(MAX);
+	SELECT @Ma_NV=inserted.Ma_NV, @TenTaiKhoan=inserted.SDT,@QUYEN=inserted.Chuc
+	FROM inserted
+	INSERT INTO ACCounts VALUES (@Ma_NV,@TenTaiKhoan,1,@QUYEN)
+COMMIT
+GO
+CREATE TRIGGER KiemTraTen ON NhanVien
+FOR INSERT,UPDATE
+AS
+BEGIN
+	DECLARE @Incresment INT, @TEN NVARCHAR(MAX);
+	SET @Incresment=1;
+	SELECT @TEN=inserted.HoTen
+	FROM inserted
+	WHILE (@Incresment<LEN(@TEN))
+		BEGIN
+			IF ((SUBSTRING(@TEN,@Incresment, 1) BETWEEN '!' AND'~') or (SUBSTRING(@TEN,@Incresment, 1) BETWEEN '0' AND'9'))
+			BEGIN
+			RAISERROR (N'Tên không hợp lệ',10,1);
+			ROLLBACK;
+			END
+			SET @Incresment=@Incresment+1
+		END
+END
+GO
 
 --CREATE PROC TinhTienHoaDon (@Ma_HoaDon INT)
 --AS
@@ -447,41 +513,22 @@ GO
 --GO
 
 
-CREATE TRIGGER TinhDoanhThuNgay ON HoaDon
-AFTER INSERT,UPDATE
-AS
-BEGIN TRAN
-	DECLARE @TONGTHU INT, @NGAY DATE;
-	SELECT @TONGTHU=inserted.TongTien,@NGAY=inserted.NgayKham
-	FROM inserted
-	IF ((SELECT DoanhThu.NgayThu
-		FROM DoanhThu
-		WHERE DoanhThu.NgayThu=@NGAY) IS NULL) 
-		INSERT INTO DoanhThu VALUES (@NGAY,@TONGTHU);
-	ELSE IF((SELECT HoaDon.Ma_HoaDon
-			FROM HoaDon,inserted
-			WHERE HoaDon.TrangThai=1 AND HoaDon.Ma_HoaDon=inserted.Ma_HoaDon) IS NULL)
-	BEGIN
-		DECLARE @TongThuCu INT;
-		SELECT @TongThuCu=DoanhThu.TongThu
-		FROM DoanhThu
-		WHERE DoanhThu.NgayThu=@NGAY
-		UPDATE DoanhThu SET TongThu=@TongThuCu+@TONGTHU
-						WHERE NgayThu=@NGAY
-	END
-COMMIT
-GO
 
 
 
-EXEC ThemNhanVien N'BACS XONG HOO','10-10-1989','09012345678','BS',12000
+
+           
+ 
+
+EXEC ThemNhanVien N'Bat Xong Hia','10-10-1989','09012345678','BS',12000
+EXEC ThemNhanVien N'Choi Xong !Chay','10-10-1989','09099090','YT',124567
 EXEC ThemBenhNhan N'Lee Hang Soul',25,1,0905657894
 EXEC ThemBenhNhan N'Park Hang Seo',45,1,0779825721
 EXEC ThemDichVu N'Khám Bệnh',20000
 EXEC ThemDichVu N'Xét nghiệm máu',40000
 EXEC ThemThuocMoi N'Paradon Extra',100,N'Hộp',12000
-EXEC ChiDinhDV 2,N'Khám Bệnh'
-EXEC ThemToaThuoc 2,N'Paradon Extra',5,N'Viên',N'2 Viên/ngày'
+EXEC ChiDinhDV 1,N'Khám Bệnh'
+EXEC ThemToaThuoc 1,N'Paradon Extra',5,N'Viên',N'2 Viên/ngày'
 
 SELECT *
 FROM DanhSachNV()
