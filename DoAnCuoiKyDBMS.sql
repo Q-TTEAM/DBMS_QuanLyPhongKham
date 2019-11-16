@@ -100,7 +100,7 @@ CREATE PROC ThemNhanVien
 	@Luong INT
 AS
 BEGIN
-INSERT INTO NhanVien VALUES (@HoTen,@NgaySinh,@SDT,@Chuc,@Luong,NULL,1);
+INSERT INTO NhanVien VALUES (@HoTen,@NgaySinh,@SDT,@Chuc,@Luong,0,1);
 END
 GO
 CREATE PROC SuaNhanVien
