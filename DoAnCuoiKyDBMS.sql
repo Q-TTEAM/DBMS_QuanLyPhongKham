@@ -6,7 +6,7 @@ GO
 CREATE TABLE Thuoc ( 
 	Ma_Thuoc int identity(1,1) primary key,
 	Ten	NVARCHAR(40) NOT NULL,
-	SoLuong DECIMAL (10,2) NOT NULL,
+	SoLuong INT NOT NULL,
 	DonVi NVARCHAR (7) NOT NULL,
 	Gia int NOT NULL,
 	TrangThai bit
@@ -25,7 +25,7 @@ CREATE TABLE BenhNhan (
 	Ma_BN int IDENTITY(1,1) PRIMARY KEY,
 	Ten NVARCHAR(MAX) NOT NULL,
 	Tuoi INT,
-	GioiTinh int,
+	GioiTinh NVARCHAR(10),
 	SDT CHAR(12) NOT NULL
 );
 CREATE TABLE DichVu (
@@ -54,12 +54,13 @@ CREATE TABLE ChiTietDV (
 CREATE TABLE ToaThuoc (
 	Ma_HoaDon INT,
 	Ma_Thuoc INT,
-	SoLuong DECIMAL(10,2) NOT NULL,
+	SoLuong INT NOT NULL,
 	DonVi NVARCHAR(7) NOT NULL,
 	HuongDanSD NVARCHAR(40) NOT NULL,
 	Gia INT NOT NULL,
 	BacSi INT,
 	PRIMARY KEY (Ma_HoaDon,Ma_Thuoc),
+	FOREIGN KEY (Ma_HoaDon) REFERENCES HoaDon (Ma_HoaDon),
 	FOREIGN KEY (BacSi) REFERENCES NhanVien (Ma_NV),
 	FOREIGN KEY (Ma_Thuoc) REFERENCES Thuoc (Ma_Thuoc)
 );
@@ -69,13 +70,6 @@ CREATE TABLE ACCounts (
 	PassWord VARCHAR(20) NOT NULL,
 	Quyen NVARCHAR(20) NOT NULL,
 	FOREIGN KEY (Ma_NV) REFERENCES NhanVien(Ma_NV)
-);
-CREATE TABLE LichSuKham (
-	Ma_BN INT,
-	NgayKham DATE,
-	ChuanDoan NVARCHAR(MAX),
-	PRIMARY KEY (Ma_BN,NgayKham),
-	FOREIGN KEY (Ma_BN) REFERENCES BenhNhan(Ma_BN)
 );
 CREATE TABLE DoanhThu (
 	Ma_DoanhThu INT IDENTITY(1,1) PRIMARY KEY,
@@ -137,12 +131,13 @@ AS
 BEGIN TRAN
 	UPDATE NhanVien SET TrangThai=0
 					WHERE Ma_NV=@Ma_NV
+	DELETE ACCounts	WHERE Ma_NV=@ma_NV
 COMMIT
 GO
 CREATE FUNCTION DanhSachNV()
  RETURNS TABLE
  AS
- RETURN	SELECT Ma_NV,HoTen,NgaySinh,Chuc,Luong,TangCa
+ RETURN	SELECT Ma_NV,HoTen,NgaySinh,SDT,Chuc,Luong,TangCa
 		FROM NhanVien
 		WHERE NhanVien.TrangThai=1
 
@@ -154,7 +149,7 @@ CREATE FUNCTION TimNVTheoTen(@HoTen NVARCHAR(40))
 		FROM NhanVien
 		WHERE NhanVien.HoTen like '%'+@HoTen+'%' AND NhanVien.TrangThai=1
 GO
-CREATE FUNCTION TimNVTheoChuc(@Chuc NVARCHAR(7))
+CREATE FUNCTION TimNVTheoChuc(@Chuc NVARCHAR(MAX))
  RETURNS TABLE
  AS
  RETURN	SELECT Ma_NV,HoTen,NgaySinh,Chuc,Luong,TangCa
@@ -199,7 +194,6 @@ CREATE FUNCTION DanhSachBN()
  AS
  RETURN	SELECT *
 		FROM BenhNhan
-
 GO
 CREATE FUNCTION TimBNTheoTen(@Ten NVARCHAR(40))
  RETURNS TABLE
@@ -254,6 +248,23 @@ AS
 RETURN SELECT Ma_Thuoc,Ten,SoLuong,DonVi,Gia
 		FROM Thuoc
 		WHERE Thuoc.TrangThai=1
+GO
+CREATE FUNCTION TimThuocTheoTen (@TenThuoc NVARCHAR(MAX))
+RETURNS TABLE
+AS
+RETURN SELECT Ma_Thuoc
+		FROM Thuoc
+		WHERE Thuoc.Ten=@TenThuoc
+GO
+
+CREATE PROC ThemHoaDon
+	@Ma_BN INT
+AS
+BEGIN
+	DECLARE @NgayKham DATE;
+	SET @NgayKham=GETDATE();
+	INSERT INTO HoaDon VALUES(@Ma_BN,@NgayKham,null,0,0)
+END
 GO
 
 CREATE PROC ThemDichVu
@@ -317,6 +328,7 @@ RETURNS TABLE
 AS
 RETURN SELECT DichVu.TenDV
 		FROM DichVu
+		WHERE DichVu.TrangThai=1
 GO
 CREATE FUNCTION TimDVTheoMa (@Ma_DV INT)
 RETURNS TABLE
@@ -326,20 +338,13 @@ RETURN SELECT Ma_DichVu,TenDV,Gia
 		WHERE DichVu.Ma_DichVu=@Ma_DV
 GO
 
-CREATE PROC ThemHoaDon
-	@Ma_BN INT
-AS
-BEGIN
-	DECLARE @NgayKham DATE;
-	SET @NgayKham=GETDATE();
-	INSERT INTO HoaDon VALUES(@Ma_BN,@NgayKham,null,0,0)
-END
-GO
+
 CREATE PROC ThemToaThuoc
 	@Ma_BN INT,
 	@TenThuoc NVARCHAR(40),
 	@SoLuong DECIMAL(10,2),
 	@DonVi NVARCHAR(10),
+	@Ma_NV INT,
 	@HuongDanSD NVARCHAR(40)
 AS
 BEGIN
@@ -352,7 +357,7 @@ BEGIN
 	SELECT @Ma_Thuoc=Thuoc.Ma_Thuoc
 	FROM Thuoc
 	WHERE THUOC.Ten=@TenThuoc
-	INSERT INTO ToaThuoc VALUES (@Ma_HoaDon,@Ma_Thuoc,@SoLuong,@DonVi,@HuongDanSD,0,NULL)
+	INSERT INTO ToaThuoc VALUES (@Ma_HoaDon,@Ma_Thuoc,@SoLuong,@DonVi,@HuongDanSD,0,@Ma_NV)
 END
 GO
 CREATE FUNCTION DanhSachToaThuocBN(@Ma_BN INT)
@@ -386,6 +391,14 @@ RETURN	SELECT YEAR(DoanhThu.NgayThu) AS NamThu,SUM(TongThu) AS TONGTHU
 		GROUP BY YEAR(DoanhThu.NgayThu)
 GO
 
+
+CREATE FUNCTION DanhSachHDChuaTra ()
+RETURNS TABLE
+AS
+RETURN SELECT BenhNhan.Ten, BenhNhan.Tuoi, HoaDon.Ma_HoaDon,HoaDon.NgayKham,HoaDon.TongTien
+		FROM HoaDon,BenhNhan
+		WHERE HoaDon.Ma_BN=BenhNhan.Ma_BN AND HoaDon.TrangThai=0
+GO
 CREATE PROC ThanhToanHoaDon @Ma_HoaDon INT
 AS
 BEGIN
@@ -482,7 +495,72 @@ BEGIN
 	FROM inserted
 	WHILE (@Incresment<LEN(@TEN))
 		BEGIN
-			IF ((SUBSTRING(@TEN,@Incresment, 1) BETWEEN '!' AND'~') or (SUBSTRING(@TEN,@Incresment, 1) BETWEEN '0' AND'9'))
+			IF ( (ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 33 AND 64) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 91 AND 96) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 123 AND 126 ) )
+			BEGIN
+			RAISERROR (N'Tên không hợp lệ',10,1);
+			ROLLBACK;
+			END
+			SET @Incresment=@Incresment+1
+		END
+END
+GO
+CREATE TRIGGER KiemTraTenBN ON BenhNhan
+FOR INSERT,UPDATE
+AS
+BEGIN
+	DECLARE @Incresment INT, @TEN NVARCHAR(MAX);
+	SET @Incresment=1;
+	SELECT @TEN=inserted.Ten
+	FROM inserted
+	WHILE (@Incresment<LEN(@TEN))
+		BEGIN
+			IF ( (ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 33 AND 64) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 91 AND 96) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 123 AND 126 ) )
+			BEGIN
+			RAISERROR (N'Tên không hợp lệ',10,1);
+			ROLLBACK;
+			END
+			SET @Incresment=@Incresment+1
+		END
+END
+GO
+CREATE TRIGGER KiemTraTenThuoc ON Thuoc
+FOR INSERT,UPDATE
+AS
+BEGIN
+	DECLARE @Incresment INT, @TEN NVARCHAR(MAX);
+	SET @Incresment=1;
+	SELECT @TEN=inserted.TenThuoc
+	FROM inserted
+	WHILE (@Incresment<LEN(@TEN))
+		BEGIN
+			IF ( (ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 33 AND 64) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 91 AND 96) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 123 AND 126 ) )
+			BEGIN
+			RAISERROR (N'Tên không hợp lệ',10,1);
+			ROLLBACK;
+			END
+			SET @Incresment=@Incresment+1
+		END
+END
+GO
+CREATE TRIGGER KiemTraTenDV ON DichVu
+FOR INSERT,UPDATE
+AS
+BEGIN
+	DECLARE @Incresment INT, @TEN NVARCHAR(MAX);
+	SET @Incresment=1;
+	SELECT @TEN=inserted.TenDV
+	FROM inserted
+	WHILE (@Incresment<LEN(@TEN))
+		BEGIN
+			IF ( (ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 33 AND 64) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 91 AND 96) OR 
+			(ASCII(SUBSTRING(@TEN,@Incresment, 1)) BETWEEN 123 AND 126 ) )
 			BEGIN
 			RAISERROR (N'Tên không hợp lệ',10,1);
 			ROLLBACK;
@@ -492,25 +570,9 @@ BEGIN
 END
 GO
 
---CREATE PROC TinhTienHoaDon (@Ma_HoaDon INT)
---AS
---BEGIN TRAN TienHoaDon
---	DECLARE @TongTienDV INT, @TongTienToaThuoc INT;
---		BEGIN TRAN TienDV
---		SELECT @TongTienDV=SUM(DichVu.Gia)
---		FROM ChiTietDV,DichVu
---		WHERE ChiTietDV.Ma_HoaDon=@Ma_HoaDon AND ChiTietDV.Ma_DichVu=DichVu.Ma_DichVu
---		COMMIT TRAN TienDV
 
---		BEGIN TRAN TienToaThuoc
---		SELECT @TongTienToaThuoc=SUM(ToaThuoc.Gia)
---		FROM ToaThuoc
---		WHERE ToaThuoc.Ma_HoaDon=@Ma_HoaDon
---		COMMIT TRAN TienToaThuoc
---	UPDATE HoaDon SET TongTien=@TongTienDV+@TongTienToaThuoc
---					WHERE Ma_HoaDon=@Ma_HoaDon
---COMMIT TRAN TienHoaDon
---GO
+
+
 
 
 
@@ -518,35 +580,3 @@ GO
 
 
            
- 
-
-EXEC ThemNhanVien N'Bat Xong Hia','10-10-1989','09012345678','BS',12000
-EXEC ThemNhanVien N'Choi Xong !Chay','10-10-1989','09099090','YT',124567
-EXEC ThemBenhNhan N'Lee Hang Soul',25,1,0905657894
-EXEC ThemBenhNhan N'Park Hang Seo',45,1,0779825721
-EXEC ThemDichVu N'Khám Bệnh',20000
-EXEC ThemDichVu N'Xét nghiệm máu',40000
-EXEC ThemThuocMoi N'Paradon Extra',100,N'Hộp',12000
-EXEC ChiDinhDV 1,N'Khám Bệnh'
-EXEC ThemToaThuoc 1,N'Paradon Extra',5,N'Viên',N'2 Viên/ngày'
-
-SELECT *
-FROM DanhSachNV()
-
-SELECT *
-FROM TimNVTheoTen('LÊ VĂN')
-
-SELECT *
-FROM TimNVTheoChuc('PT')
-SELECT *
-FROM HienDoanhThuNam()
-SELECT *
-FROM HienDoanhThuThang('10/11/2019')
-SELECT *
-FROM HienDoanhThuNgay('11/16/2019')
-SELECT *
-FROM DanhSachBN()
-SELECT *
-FROM DanhSachDV()
-SELECT *
-FROM TenDV()
